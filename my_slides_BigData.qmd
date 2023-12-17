@@ -1,0 +1,494 @@
+---
+title: "Evolución comparativa de la inflación en España "  #- título
+date: 2023-12-19              #- ISO8601 YYYY-MM-DD format 
+date-format: short
+format: 
+  revealjs:
+    scrollable: true
+    slide-level: 2
+    height: 900
+    width: 1600
+    toc: false
+    center-title-slide: true
+    title-slide-attributes: #- atributos para la slide de titulo
+      data-background-color: "#FF8DC"   #- color de R-ladies
+    preview-links: auto  #- true: abre un iframe en lugar de abrir ventana
+    link-external-newwindow: true
+    transition: fade
+    fontcolor: "#262d36"
+    highlight-style: a11y
+    code-line-numbers: true
+    number-sections: false
+    slide-number: c/t  
+    incremental: false
+    echo: false  
+footer: |
+  Slides hechas con [Quarto](https://quarto.org/) 
+#theme: moon
+---
+
+# 1. Descripción general del trabajo: Datos, Metodología y Definiciones
+
+
+```{r}
+#- 0) Librerías utilizadas -------------------------------------------------------
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(ggplot2)
+library(ggthemes)
+library(dplyr)
+library(plotly)
+library(openxlsx)
+library(countrycode)
+library(ggimage)
+library(gganimate)
+library(lubridate)
+library(sf)
+library(mapSpain)
+
+
+```
+
+
+
+# 2. Comparativa a nivel internacional
+
+---
+
+### 2.1 Comparación del IPC de España vs Otros países
+
+
+```{r}
+
+#- 2) Comparativa a nivel internacional ----------------------------------------
+
+#- 2.1) Comparación IPC de España vs Otros países ----
+
+#- Datos (Inflación de la OCDE)
+url_inflacion <- "https://stats.oecd.org/sdmx-json/data/DP_LIVE/.CPI.../OECD?contentType=csv&detail=code&separator=comma&csv-lang=en"
+ruta_inflacion <- "./datos/inflacion_ocde.csv"
+curl::curl_download(url_inflacion, ruta_inflacion) # descargamos los datos
+
+inflacion_orig <- readr::read_csv(ruta_inflacion)
+
+#- Data munging 
+inflacion <- inflacion_orig %>%
+  filter(FREQUENCY == "A") %>%
+  filter(MEASURE == "AGRWTH") %>%
+  filter(SUBJECT == "TOT") %>% 
+  select(pais = LOCATION, año = TIME, inflacion = Value) %>%
+  filter(pais %in% c("ESP","ITA","FRA","DEU","JPN","GBR","USA")) %>%
+  filter(año >= 1990) %>%
+  mutate(año = as.Date(paste0(año, "-01-01")),
+         iso2 = countrycode(sourcevar = pais, origin = "iso3c", 
+                            destination = "iso2c", warn = FALSE))
+
+#- Gráfico interactivo 
+
+p <- ggplot(inflacion, aes(x = año, y = inflacion, color = pais)) +
+  geom_line(size = 1) +
+  labs(title = "Evolución del IPC por país",
+       x = "Año", y = "IPC") +
+  theme_minimal() + 
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+        plot.title = element_text(size = 20, face = "bold", hjust = 0.5),
+        axis.title.x = element_text(size = 13, hjust = 1, vjust = 0),
+        axis.title.y = element_text(size = 13, hjust = 1, vjust = 1),
+        legend.title = element_text(face = "bold"),
+        panel.grid.major = element_line(colour = "gray87", linetype = "dashed"),
+        panel.background = element_rect(fill = "aliceblue"),
+        panel.grid.minor = element_blank(),
+        axis.text = element_text(family = "serif", size = 9, colour = "gray17")) + scale_color_manual(values = c("coral1", "tan4", "yellow", "blue", "red", "orange", "green3")) +
+  geom_text(aes(label = pais), nudge_x = 0.5, nudge_y = 0.5, hjust = 0)
+
+p_animated <- p + transition_reveal(año) +
+  enter_fade() + 
+  exit_fade()
+
+animate(p_animated, nframes = 200, fps = 20) 
+
+```
+
+
+
+# 3. Comparativa a nivel nacional
+
+---
+
+### 3.1 Evolución de la inflación para España en Agregado
+
+
+```{r}
+#- 3.0) Limpieza de los datos del apartado 3 ----
+
+ruta <- "./datos/INE.CSV" #Bajamos los datos extraídos del INE
+df_inflacion <- rio::import(ruta)
+#Los arreglamos para que solo salga un dato de inflación por año (el dato de inflación que sale corresponde a la inflación anual de enero). El resto de código es solo arreglando los nombres 
+df0 <- df_inflacion %>% 
+  filter(str_sub(Periodo, 6, 7) == "01") %>%
+  mutate(Periodo = str_sub(Periodo, 1, 4)) %>%
+  mutate(`Comunidades y Ciudades Autónomas` = ifelse(`Comunidades y Ciudades Autónomas` != "Nacional",
+                                                     str_sub(`Comunidades y Ciudades Autónomas`, 4),
+                                                     `Comunidades y Ciudades Autónomas`)) %>%
+  select(`Comunidades y Ciudades Autónomas`, Periodo, Total)  %>%
+  rename("CCAA" = `Comunidades y Ciudades Autónomas` ) %>%
+  mutate(Total =  as.numeric(gsub(",", ".",Total)))
+
+#Por si es de utilidad, aquí está el mismo gráfico pero en formato wider
+df1 <- df0 %>% pivot_wider(names_from = Periodo, values_from = Total)
+df_infl_esp <- df0 %>% filter(`CCAA`== "Nacional")
+
+p2 <- ggplot(data = df_infl_esp,
+             aes(x = Periodo, y = Total)) +
+  geom_col(fill = "#8270AA") + 
+  theme_minimal()+
+  theme_stata() +
+  labs(title = "Evolución de la Inflación España", caption = "Datos provenientes del INE", x = "Año", y = "Tasa de inflación") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1), plot.title = element_text(face = "bold", hjust = 0.5), plot.caption = element_text(hjust = 0.5))
+
+p2
+```
+
+
+---
+
+### 3.2 Evolución de inflación para todas las Comunidades Autonómas
+
+```{r}
+tabla_scroll <- df1 %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                font_size = 20, full_width = FALSE) %>%
+  scroll_box(width = "100%", height = "700px")  # Ajusta el valor de height según sea necesario
+
+tabla_scroll
+```
+
+---
+
+### 3.3 Comunidad con mayor inflación para cada año
+
+```{r, out.width = "1500px", out.height = "840px"}
+df2 <- df0 %>%
+  group_by(Periodo) %>%
+  slice_max(order_by = Total, n = 1) %>%
+  ungroup() %>%
+  arrange(Periodo)
+
+# Crear el gráfico base con ggplot
+p <- ggplot(data = df2, mapping = aes(x = Periodo, y = Total, fill = CCAA)) + 
+  geom_bar(stat = "identity", position = "identity", width = 0.7) + 
+  labs(title = "Evolución de la Comunidad con mayor Inflación cada año", tag = "ESPAÑA") + 
+  guides(fill = FALSE) + 
+  theme(legend.position = "none", axis.text.x = element_text(angle = 45, hjust = 1)) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1), plot.title = element_text(face = "bold", hjust = 0.5), plot.caption = element_text(hjust = 0.5)) + theme_stata(base_family = "")
+
+# Convertir el gráfico base a un gráfico interactivo con plotly
+p_interactivo <- ggplotly(p, tooltip = "CCAA", width = 1500, height = 840)
+
+
+# Mostrar el gráfico interactivo
+p_interactivo
+```
+
+---
+
+### 3.3.1 Tres comunidades con mayor inflación anual en la historia 
+
+```{r, out.width = "1500px", out.height = "600px"}
+#Tres comunidades con mayor inflación 
+df1_long <- df1 %>%
+  gather(key = "Año", value = "Inflacion", - CCAA)
+
+# Seleccionar las tres observaciones con los valores más altos de inflación
+top_3_inflacion <- df1_long %>%
+  arrange(desc(Inflacion)) %>%
+  slice_head(n = 3)
+
+tabla <- top_3_inflacion %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                font_size = 45, full_width = TRUE)
+
+tabla
+
+
+```
+
+<br>
+
+### 3.3.2 Tres comunidades con menor inflación anual en la historia
+
+```{r, out.width = "1500px", out.height = "800px"}
+bottom_3_inflacion <- df1_long %>%
+  arrange(Inflacion) %>%
+  slice_head(n = 3)
+
+# Crear la tablacon kableExtra
+tabla2 <- bottom_3_inflacion %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                font_size = 45, full_width = TRUE)
+
+tabla2
+```
+
+---
+
+### 3.4.1 Tabla top 3 CCAA más ricas de 2021
+
+```{r}
+# Crear un dataframe con los datos para 2021 del PIB pc 
+
+ruta1 <- "./datos/pibpccomunidades.xlsx"
+df_pibpc <- rio::import(ruta1)
+#Hago una taba para las tres comunidades con mayor PIB pc
+top_3_pibpc <- df_pibpc %>%
+  arrange(desc(Valor)) %>%
+  slice_head(n = 3)
+# Crear la tabla con kableExtra
+tabla_top_pibpc <- top_3_pibpc %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                font_size = 45, full_width = FALSE)
+# Mostrar la tabla 
+tabla_top_pibpc
+```
+
+<br>
+
+### 3.4.2 Top 3 CCAA más pobres de 2021
+
+```{r}
+bottom_3_pibpc <- df_pibpc %>%
+  arrange(Valor) %>%
+  slice_head(n = 3)
+
+# Crear la tabla bonita con kableExtra
+tabla_bottom_pibpc <- bottom_3_pibpc %>%
+  kable() %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed", "responsive"),
+                font_size = 45, full_width = FALSE)
+
+# Mostrar la tabla bonita
+tabla_bottom_pibpc
+```
+
+---
+
+#### 3.4.2 Gráfica comparativa de la evolución de sus respectivas inflaciones
+
+```{r, out.width = "1500px", out.height = "840px"}
+# Filtrar las comunidades más ricas (top 3)
+comunidades_ricas <- c("Madrid, Comunidad de", "País Vasco", "Navarra, Comunidad Foral de")
+df_ricas <- df0 %>% 
+  filter(CCAA %in% comunidades_ricas) %>%
+  group_by(Periodo) %>%
+  summarize(promedio = mean(Total))
+
+# Filtrar las comunidades más pobres (bottom 3)
+comunidades_pobres <- c("Extremadura", "Andalucía", "Canarias")
+df_pobres <- df0 %>% 
+  filter(CCAA %in% comunidades_pobres) %>%
+  group_by(Periodo) %>%
+  summarize(promedio = mean(Total))
+
+# Unir los dos conjuntos de datos
+df_comparativa <- bind_rows(
+  mutate(df_ricas, Grupo = "Comunidades Ricas"),
+  mutate(df_pobres, Grupo = "Comunidades Pobres")
+)
+
+# Gráfico interactivo con plotly y tema stata
+p3_4_2 <- ggplot(df_comparativa, aes(x = as.numeric(Periodo), y = promedio, color = Grupo, group = Grupo)) +
+  geom_line() +
+  labs(title = "Evolución del Promedio de Inflación en Comunidades Autónomas",
+       x = "Año",
+       y = "Tasa de Inflación Promedio",
+       color = "Grupo",
+       caption = "Datos provenientes del INE") + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1), plot.title = element_text(face = "bold", hjust = 0.5), plot.caption = element_text(hjust = 0.5)) + theme_stata(base_family = "")
+
+# Convertir el gráfico base a un gráfico interactivo con plotly
+p_interactivo_3_4_2 <- ggplotly(p3_4_2, tooltip = "Grupo", width = 1500, height = 840)
+
+# Mostrar el gráfico interactivo
+p_interactivo_3_4_2
+
+```
+
+---
+
+### 3.5 Crisis del 2008, Crisis del COVID, Guerra Rusia - Ucrania
+
+#### 3.5.1 Crisis del 2008
+
+
+```{r}
+#- 3.5) Evolución de la inflación en las CCAA: Crisis del 2008, Crisis del COVID, Guerra Rusia - Ucrania ----
+
+#- 3.5.1) Crisis del 2008 ----
+
+#Obtenemos el mapa de España por CCAA
+df_ccaa <- esp_get_ccaa()%>%
+  select(ine.ccaa.name, geometry) %>%
+  rename("CCAA" = ine.ccaa.name)
+
+
+#Nuevo df con los datos de inflación que necesitamos
+
+df_datos_mapa <- df0 %>% filter(Periodo %in% c(2008, 2010, 2012, 2014)) %>%
+  filter(`CCAA`!= "Nacional")
+
+df_mapa <- left_join(df_ccaa, df_datos_mapa, by = c("CCAA" = "CCAA"))
+
+df_mapa_ccaa <- df_mapa %>%
+  group_by(Periodo) %>%
+  mutate(inflacion_ccaa_4 = ntile(Total, 4)) %>% 
+  ungroup() %>% 
+  mutate(inflacion_ccaa_4.f = forcats::as_factor(inflacion_ccaa_4))
+
+p7 <- ggplot(df_mapa_ccaa) +
+  geom_sf(aes(geometry = geometry, fill = inflacion_ccaa_4.f)) + 
+  scale_fill_brewer(palette = "Blues", name = NULL,
+                    labels = c("1er cuartil", "2do cuartil", "3er cuartil", "4to cuartil"))+
+  facet_wrap(vars(Periodo)) +
+  theme(axis.text.x = element_blank(),
+        axis.text.y = element_blank()) +
+  labs(title = "Inflación por CCAA comparativa 2008-2014" , caption = "Datos provenientes del INE") + theme_stata(base_family = "")
+
+p7
+
+```
+
+
+---
+
+#### 3.5.2 Crisis del COVID y Guerra Rusia - Ucrania
+
+
+```{r}
+#- 3.5.2) Crisis del COVID y Guerra Rusia - Ucrania ----
+
+#Primero preparo un sf con la info necesaria para el gráfico de barras
+
+df_barras <- df0 %>% 
+  filter(`CCAA`!= "Nacional") %>% 
+  filter(Periodo %in% c(2021,2022)) 
+
+#Ahora hago el gráfico de barras
+
+p8 <- df_barras %>%
+  ggplot(aes(x = CCAA, y = Total, fill = Periodo)) +
+  geom_col(position = "dodge") + 
+  theme_stata(base_family = "") +
+  labs(x = "Comunidades Autónomas y Ciudades Autónomas", y = "Nivel de Inflación", 
+       title = "Nivel de Inflación COVID vs. Guerra Ucrania", caption = "Datos provenientes del INE") +
+  scale_fill_manual(values = c("#FFA547", "#508099"), 
+                    labels = c("COVID", "Guerra Ucrania")) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  guides(fill = guide_legend(title = NULL)) 
+
+p8
+```
+
+
+---
+
+### 3.6 Evolución de la inflación: Comunidad Valenciana vs España
+
+#### 3.6.1 Evolución anual 
+
+```{r}
+df6 <- df0 %>%
+  filter( CCAA %in% c("Nacional", "Comunitat Valenciana")) %>%
+  arrange(Periodo) %>%
+  mutate(Periodo = factor(Periodo, levels = unique(Periodo)))
+
+# Gráfico de barras agrupadas
+p6_a <- ggplot(df6, aes(x = Periodo, y = Total, fill = CCAA)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Evolución del IPC: España vs Comunidad Valenciana",
+       subtitle = "Inflación anual entre España y la Comunidad Valenciana",
+       x = "Año",
+       y = "IPC",
+       fill = "Región",
+       caption = "Elaboración propia a partir de datos extraídos del INE") + 
+  scale_fill_manual(values = c("Nacional" = "lightblue", "Comunitat Valenciana" = "darkorange")) +
+  theme_stata() + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 1,vjust = 1, size = 9, face = "plain"),legend.position = "bottom", plot.title = element_text(face = "bold", hjust = 0.5), plot.subtitle = element_text(hjust = 0.5), plot.caption = element_text(hjust = 0.5))
+
+print(p6_a)
+```
+
+
+---
+
+#### 3.6.2 Evolución mensual
+
+
+```{r}
+# Gráfico de área
+df_prueba <- df_inflacion %>%
+  mutate(`Comunidades y Ciudades Autónomas` = ifelse(`Comunidades y Ciudades Autónomas` !="Nacional", str_sub(`Comunidades y Ciudades Autónomas`, 4), `Comunidades y Ciudades Autónomas`)) %>% 
+  select(`Comunidades y Ciudades Autónomas`, Periodo, Total) %>%
+  rename("CCAA" = `Comunidades y Ciudades Autónomas` ) %>%
+  mutate(Total =  as.numeric(gsub(",", ".",Total))) %>%
+  filter( CCAA %in% c("Nacional", "Comunitat Valenciana")) %>%
+  arrange(Periodo) %>%
+  mutate(Periodo = factor(Periodo, levels = unique(Periodo))) %>%
+  select(CCAA, Periodo, Total) %>%
+  mutate(Periodo = ymd(paste(Periodo, "01")))
+
+
+p6_b <- ggplot(df_prueba, aes(x = Periodo, y = Total, fill = CCAA)) +
+  geom_area(alpha = 1.0) +
+  labs(title = "Evolución del IPC: España vs Comunidad Valenciana",
+       subtitle = "Inflación anual por meses entre España y la Comunidad Valenciana",
+       x = "Mes",
+       y = "IPC",
+       fill = "Región",
+       caption = "Elaboración propia a partir de datos extraídos del INE") + 
+  theme_stata(base_family = "") +
+  theme(legend.position = "bottom",
+        axis.text.x = element_text(angle = 45, hjust = 1, size = 8),
+        plot.title = element_text(face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(hjust = 0.5),
+        plot.caption = element_text(hjust = 0.5)) +
+  scale_fill_manual(values = c("Nacional" = "lightblue", "Comunitat Valenciana" = "orange"))
+
+
+p6_b
+
+```
+
+
+
+# 4. Conclusión 
+
+---
+
+```{r}
+mensaje_data <- data.frame(
+  Letra = strsplit("GRACIAS", "")[[1]],
+  Posicion = seq_len(nchar("GRACIAS"))
+)
+
+p <- ggplot(mensaje_data, aes(x = Posicion, y = 0, label = Letra)) +
+  geom_text(size = 30, color = "skyblue") +
+  xlim(0, nchar("GRACIAS") + 1) +
+  coord_fixed(ratio = 20) +
+  theme_void()
+
+animacion <- p +
+  transition_states(Posicion, transition_length = 0.5, state_length = 0.5) +
+  enter_fade() +
+  exit_fade() +
+  shadow_mark() 
+
+animate(animacion, fps = 20)
+```
+
+

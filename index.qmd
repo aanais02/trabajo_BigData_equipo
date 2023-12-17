@@ -1,0 +1,24 @@
+---
+title: Evolución comparativa de la inflación en España             #- Hay que cambiarlo
+image: my_foto.png      #- poned una foto vuestra
+about:
+  template: trestles        #- {jolla, solana, ...}
+  image-width: 26em         #- https://cybmeta.com/em-y-rem
+  image-shape: rectangle    #- {rectangle, round, rounded}
+  links:
+    - icon: github
+      text: Github
+      href: https://github.com/aanais02       #- Github
+---
+        
+Hola, somos Anaïs, Juan y Alessio.
+      
+Esta web sirve para presentar el trabajo en equipo para la asignatura "Programación y manejo de datos en la era Del Big Data", optativa de GECO en la Facultad de Economía de la Universitat de València.
+
+La web de la asignatura está [aquí](https://perezp44.github.io/intro-ds-23-24-web/){target="_blank"} y los trabajos de mis compañeros de curso puedes verlos [aquí](https://perezp44.github.io/intro-ds-23-24-web/05-trabajos-estudiantes.html){target="_blank"}.
+
+
+Nuestro trabajo lleva por título : "Evolución comparativa de la inflación en España". El objetivo es hacer un análisis comparativo usando datos de inflación medidos por el IPC, entre España y otos países, así como entre las CCAA dentro de España.
+
+
+El trabajo puede verse [aquí](my_trabajo_BigData.html), y las slides [aquí](my_slides_BigData.html){target="_blank"}.
